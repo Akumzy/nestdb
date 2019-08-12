@@ -28,9 +28,15 @@ interface IComparisonFunctions {
   $in?: (a: any, b: any) => boolean
   $nin?: (a: any, b: any) => boolean
   $regex?: (a: any, b: any) => boolean
-  $exists?: (a: any, b: any) => boolean
-  $size?: (a: any, b: any) => boolean
-  $elemMatch?: (a: any, b: any) => boolean
+  $exists?: (value: any, exists: any) => boolean
+  $size?: (obj: any, value: any) => boolean
+  $elemMatch?: (obj: any, value: any) => boolean
+}
+interface ILogicalOperators {
+  $or?: (obj: any, query: any) => boolean
+  $and?: (obj: any, query: any) => boolean
+  $not?: (obj: any, query: any) => boolean
+  $where?: (obj: any, fn: Function) => boolean
 }
 interface IArrayComparisonFunctions {
   $size?: true
@@ -45,7 +51,7 @@ interface IObject {
 const modifierFunctions = {},
   lastStepModifierFunctions: ILastStepModifierFunctions = {},
   comparisonFunctions: IComparisonFunctions = {},
-  logicalOperators = {},
+  logicalOperators: ILogicalOperators = {},
   arrayComparisonFunctions: IArrayComparisonFunctions = {}
 
 /**
@@ -617,7 +623,7 @@ export function modify(obj: { _id: any }, updateQuery: { [x: string]: IObject; _
  * @param {Object} obj
  * @param {String} field
  */
-export function getDotValue(obj: IObject, field: { split: (arg0: string) => void }) {
+export function getDotValue(obj: IObject, field: any) {
   let fieldParts = typeof field === 'string' ? field.split('.') : field,
     i: number,
     objs: any[]
@@ -844,7 +850,7 @@ arrayComparisonFunctions.$exists = true
  * @param {Model} obj
  * @param {Array of Queries} query
  */
-logicalOperators.$or = function(obj: any, query: { [x: string]: any; length: number }) {
+logicalOperators.$or = function(obj: any, query: any) {
   let i: number
 
   if (!Array.isArray(query)) {
@@ -865,7 +871,7 @@ logicalOperators.$or = function(obj: any, query: { [x: string]: any; length: num
  * @param {Model} obj
  * @param {Array of Queries} query
  */
-logicalOperators.$and = function(obj: any, query: { [x: string]: any; length: number }) {
+logicalOperators.$and = function(obj: any, query: any) {
   let i: number
 
   if (!Array.isArray(query)) {
@@ -895,7 +901,7 @@ logicalOperators.$not = function(obj: any, query: any) {
  * @param {Model} obj
  * @param {Query} query
  */
-logicalOperators.$where = function(obj: any, fn: { call: (arg0: any) => void }) {
+logicalOperators.$where = function(obj: any, fn: Function) {
   let result: any
 
   if (!_.isFunction(fn)) {
@@ -915,7 +921,7 @@ logicalOperators.$where = function(obj: any, fn: { call: (arg0: any) => void }) 
  * @param {Object} obj Document to check
  * @param {Object} query
  */
-export function match(obj: any, query: IObject) {
+export function match(obj: any, query: any) {
   let queryKeys: string[], queryKey: string | string[], queryValue: any, i: number
 
   // Primitive query against a primitive type
@@ -955,14 +961,14 @@ export function match(obj: any, query: IObject) {
 function matchQueryPart(
   obj: { needAKey?: any; k?: any },
   queryKey: string,
-  queryValue: any[],
-  treatObjAsValue: boolean,
+  queryValue?: any[],
+  treatObjAsValue?: boolean,
 ) {
   let objValue = getDotValue(obj, queryKey),
     i: number,
-    keys: string[] | _.List<unknown>,
-    firstChars: _.List<unknown> | any[],
-    dollarFirstChars: unknown[]
+    keys: string[],
+    firstChars: string[],
+    dollarFirstChars: string[]
 
   // Check if the value is an array if we don't force a treatment as value
   if (Array.isArray(objValue) && !treatObjAsValue) {
@@ -975,7 +981,7 @@ function matchQueryPart(
     if (queryValue !== null && typeof queryValue === 'object' && !_.isRegExp(queryValue)) {
       keys = Object.keys(queryValue)
       for (i = 0; i < keys.length; i += 1) {
-        if (arrayComparisonFunctions[keys[i]]) {
+        if (arrayComparisonFunctions[keys[String(i)]]) {
           return matchQueryPart(obj, queryKey, queryValue, true)
         }
       }
@@ -1008,11 +1014,11 @@ function matchQueryPart(
     // queryValue is an object of this form: { $comparisonOperator1: value1, ... }
     if (dollarFirstChars.length > 0) {
       for (i = 0; i < keys.length; i += 1) {
-        if (!comparisonFunctions[keys[i]]) {
+        if (!comparisonFunctions[keys[String(i)]]) {
           throw new Error('Unknown comparison function ' + keys[i])
         }
 
-        if (!comparisonFunctions[keys[i]](objValue, queryValue[keys[i]])) {
+        if (!comparisonFunctions[keys[String(i)]](objValue, queryValue[keys[i]])) {
           return false
         }
       }
